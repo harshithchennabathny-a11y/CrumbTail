@@ -1,6 +1,7 @@
 import json
+from collections import deque
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Request, Response, status
 from pydantic import BaseModel
 import uvicorn
@@ -17,8 +18,8 @@ class NotificationRequest(BaseModel):
     status: str
     payload: str
 
-# In-memory tracking for fast inspection
-processed_log: List[Dict[str, Any]] = []
+# In-memory tracking for fast inspection (bounded to prevent memory exhaustion)
+processed_log: deque = deque(maxlen=1000)
 
 @app.post("/notify")
 async def receive_notification(notif: NotificationRequest, response: Response):
@@ -63,11 +64,11 @@ async def receive_notification(notif: NotificationRequest, response: Response):
     return {"status": "delivered", "event_key": notif.event_key}
 
 @app.get("/notifications")
-async def list_notifications():
-    """Returns log of received notifications."""
+async def list_notifications(limit: int = 100):
+    """Returns log of received notifications with pagination limit."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT event_key, order_id, status, processed_at FROM processed_notifications ORDER BY processed_at DESC;")
+        cursor.execute("SELECT event_key, order_id, status, processed_at FROM processed_notifications ORDER BY processed_at DESC LIMIT ?;", (limit,))
         rows = [dict(r) for r in cursor.fetchall()]
         cursor.close()
     return {

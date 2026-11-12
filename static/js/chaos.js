@@ -7,6 +7,16 @@ document.addEventListener('DOMContentLoaded', () => {
     bindChaosButtons();
 });
 
+function escapeHtml(str) {
+    if (typeof str !== 'string') return String(str);
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function logToConsole(tag, message, json = null, type = 'info') {
     const consoleEl = document.getElementById('console-logs');
     const now = new Date();
@@ -17,14 +27,14 @@ function logToConsole(tag, message, json = null, type = 'info') {
 
     let jsonHtml = '';
     if (json) {
-        jsonHtml = `<div class="log-json">${JSON.stringify(json, null, 2)}</div>`;
+        jsonHtml = `<div class="log-json">${escapeHtml(JSON.stringify(json, null, 2))}</div>`;
     }
 
     entry.innerHTML = `
-        <span class="log-ts">${timeStr}</span>
-        <span class="log-tag ${type}">[${tag}]</span>
+        <span class="log-ts">${escapeHtml(timeStr)}</span>
+        <span class="log-tag ${escapeHtml(type)}">[${escapeHtml(tag)}]</span>
         <div class="log-msg">
-            ${message}
+            ${escapeHtml(message)}
             ${jsonHtml}
         </div>
     `;

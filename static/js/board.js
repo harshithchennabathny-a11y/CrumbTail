@@ -110,16 +110,25 @@ function renderOrderCard(order) {
     card.dataset.orderId = order.id;
     card.dataset.status = order.status;
 
-    let riderHtml = '';
-    if (order.rider_id) {
-        riderHtml = `<div class="card-rider">🛵 Rider: ${order.rider_id}</div>`;
-    }
+    // Build DOM elements safely to prevent DOM XSS
+    card.innerHTML = '';
+    const idEl = document.createElement('div');
+    idEl.className = 'card-id';
+    idEl.textContent = order.id;
 
-    card.innerHTML = `
-        <div class="card-id">${order.id}</div>
-        <div class="card-cust">Customer: ${order.customer_id}</div>
-        ${riderHtml}
-    `;
+    const custEl = document.createElement('div');
+    custEl.className = 'card-cust';
+    custEl.textContent = `Customer: ${order.customer_id}`;
+
+    card.appendChild(idEl);
+    card.appendChild(custEl);
+
+    if (order.rider_id) {
+        const riderEl = document.createElement('div');
+        riderEl.className = 'card-rider';
+        riderEl.textContent = `🛵 Rider: ${order.rider_id}`;
+        card.appendChild(riderEl);
+    }
 
     list.appendChild(card);
 }
