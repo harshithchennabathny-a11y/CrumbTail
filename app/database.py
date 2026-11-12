@@ -8,11 +8,11 @@ def get_connection() -> sqlite3.Connection:
     Returns an SQLite connection configured with WAL mode and busy timeout
     to allow concurrent multi-process writes without locking errors.
     """
-    conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL;")
-    cursor.execute("PRAGMA busy_timeout=5000;")
+    cursor.execute("PRAGMA busy_timeout=30000;")
     cursor.execute("PRAGMA synchronous=NORMAL;")
     cursor.execute("PRAGMA foreign_keys=ON;")
     cursor.close()
