@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crumb Tail — Operations Map & 2,000 Rider Radar</title>
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --panel-bg: #111827;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #1f2937;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Navigation Bar */
+        header {
+            background: #111827;
+            border-bottom: 1px solid var(--border);
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.15rem; color: #fff; }
+        .brand span { color: var(--accent); }
+        .nav-links { display: flex; gap: 1rem; }
+        .nav-link { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 6px; transition: all 0.2s; }
+        .nav-link:hover, .nav-link.active { color: #fff; background: var(--card-bg); }
+        .nav-link.chaos { color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4); }
+
+        /* 5 Metric Gauges */
+        .metrics-strip {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: #0d131f;
+            border-bottom: 1px solid var(--border);
+        }
+        .gauge-card {
+            background: #131d2e;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .gauge-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .gauge-val {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.02em;
+        }
+        .gauge-target {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        .gauge-target span { color: var(--success); font-weight: 600; }
+
+        /* Main Workspace */
+        .ops-workspace {
+            display: flex;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Fullscreen Radar Canvas */
+        #radar-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: radial-gradient(circle at center, #111a2e 0%, #080c14 100%);
+        }
+
+        /* Overlay Controls */
+        .canvas-overlay {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+        .overlay-card {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-width: 200px;
+        }
+        .btn-ctrl {
+            background: #1e293b;
+            color: #fff;
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-align: center;
+            font-weight: 600;
+        }
+        .btn-ctrl:hover { background: #334155; }
+
+        /* Legend */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* Live status chip */
+        .live-chip {
+            position: absolute;
+            bottom: 1.5rem;
+            left: 1.5rem;
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            padding: 0.4rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--success);
+            z-index: 10;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Crumb<span>Tail</span>
+            <span style="font-size: 0.75rem; background: #334155; color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-weight: 500;">Operations Control</span>
+        </div>
+        <nav class="nav-links">
+            <a href="/static/index.html" class="nav-link">📍 Customer Tracking</a>
+            <a href="/static/restaurant.html" class="nav-link">📋 Restaurant Kanban</a>
+            <a href="/static/ops.html" class="nav-link active">🌐 Operations Map</a>
+            <a href="/static/chaos.html" class="nav-link chaos">⚡ Chaos Engine</a>
+        </nav>
+    </header>
+
+    <!-- 5 Real-Time Operational Metric Gauges -->
+    <div class="metrics-strip">
+        <!-- 1. Updates / sec -->
+        <div class="gauge-card">
+            <div class="gauge-title">
+                <span>Ingest Throughput</span>
+                <span>⚡</span>
+            </div>
+            <div class="gauge-val" id="metric-updates">0/s</div>
+            <div class="gauge-target">Target: <span>&gt; 2,000/s</span></div>
+        </div>
+
+        <!-- 2. Nearest-Rider Latency p95 -->
+        <div class="gauge-card">
+            <div class="gauge-title">
+                <span>Nearest-Rider Latency (p95)</span>
+                <span>⏱️</span>
+            </div>
+            <div class="gauge-val" id="metric-p95" style="color: var(--accent);">14.2 ms</div>
+            <div class="gauge-target">Target: <span>&lt; 50 ms</span></div>
+        </div>
+
+        <!-- 3. Active Viewers -->
+        <div class="gauge-card">
+            <div class="gauge-title">
+                <span>Active WS Viewers</span>
+                <span>👥</span>
+            </div>
+            <div class="gauge-val" id="metric-viewers" style="color: var(--success);">0</div>
+            <div class="gauge-target">Target: <span>Stateless Lease Sync</span></div>
+        </div>
+
+        <!-- 4. DB Writes / sec -->
+        <div class="gauge-card">
+            <div class="gauge-title">
+                <span>DB Writes / sec</span>
+                <span>💾</span>
+            </div>
+            <div class="gauge-val" id="metric-db-writes">0/s</div>
+            <div class="gauge-target">Target: <span>&lt; 50 writes/s</span></div>
+        </div>
+
+        <!-- 5. Pending Outbox -->
+        <div class="gauge-card">
+            <div class="gauge-title">
+                <span>Pending Outbox</span>
+                <span>📬</span>
+            </div>
+            <div class="gauge-val" id="metric-outbox" style="color: var(--warning);">0</div>
+            <div class="gauge-target">Target: <span>0 lost alerts</span></div>
+        </div>
+    </div>
+
+    <div class="ops-workspace">
+        <canvas id="radar-canvas"></canvas>
+
+        <div class="canvas-overlay">
+            <div class="overlay-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Fleet Scale</span>
+                    <span id="fps-counter" style="font-size:0.75rem; color:var(--success); font-weight:700;">60 FPS</span>
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                    <button id="btn-scale-500" class="btn-ctrl" style="flex:1;">500 Fleet</button>
+                    <button id="btn-scale-2000" class="btn-ctrl" style="flex:1; background:rgba(34,197,94,0.2); border-color:var(--success);">2,000 Fleet</button>
+                </div>
+            </div>
+
+            <div class="overlay-card">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Fleet Filter</span>
+                <select id="filter-fleet" style="background:#0f172a; color:#fff; border:1px solid var(--border); padding:4px; border-radius:4px; font-size:0.75rem;">
+                    <option value="all">All Riders (<span id="count-all">0</span>)</option>
+                    <option value="free">Available / Free Only</option>
+                    <option value="busy">Active / Delivering Only</option>
+                </select>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                    <button id="btn-zoom-in" class="btn-ctrl" style="flex:1;">Zoom +</button>
+                    <button id="btn-zoom-out" class="btn-ctrl" style="flex:1;">Zoom -</button>
+                    <button id="btn-reset-view" class="btn-ctrl" style="flex:1;">Reset</button>
+                </div>
+            </div>
+
+            <div class="overlay-card">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Radar Legend</span>
+                <div class="legend-item">
+                    <span class="legend-dot" style="background: var(--success); box-shadow: 0 0 6px var(--success);"></span>
+                    <span>Available / Free Rider</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-dot" style="background: var(--warning); box-shadow: 0 0 6px var(--warning);"></span>
+                    <span>Active / In Transit</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-dot" style="background: var(--accent); box-shadow: 0 0 6px var(--accent);"></span>
+                    <span>Kitchen Hub / Destination</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="live-chip">
+            <span class="live-dot"></span>
+            <span id="ops-ws-status">Connecting to Real-time Stream...</span>
+        </div>
+    </div>
+
+    <script src="/static/js/ws.js"></script>
+    <script src="/static/js/ops.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crumb Tail — Restaurant Order Kanban</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --col-bg: #111827;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Navigation Bar */
+        header {
+            background: #111827;
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.2rem; color: #fff; }
+        .brand span { color: var(--accent); }
+        .nav-links { display: flex; gap: 1rem; }
+        .nav-link { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; padding: 0.4rem 0.8rem; border-radius: 6px; transition: all 0.2s; }
+        .nav-link:hover, .nav-link.active { color: #fff; background: var(--card-bg); }
+        .nav-link.chaos { color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4); }
+
+        /* Board Container */
+        .board-header {
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+        .board-container {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 1rem;
+            padding: 1.5rem;
+            flex: 1;
+            overflow-x: auto;
+        }
+
+        /* Column */
+        .column {
+            background: var(--col-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 500px;
+        }
+        .column-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .col-count {
+            background: #1e293b;
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+        }
+        .cards-list {
+            padding: 0.75rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 200px;
+        }
+        .cards-list.drag-over {
+            background: rgba(56, 189, 248, 0.05);
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+        }
+
+        /* Order Card */
+        .order-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            user-select: none;
+        }
+        .order-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .order-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+        .order-card.shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+            border-color: var(--danger) !important;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        .card-id { font-weight: 700; font-size: 0.85rem; color: #fff; margin-bottom: 0.25rem; }
+        .card-cust { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .card-rider {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Conflict Toast */
+        #toast-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 9999;
+        }
+        .toast {
+            background: #1e293b;
+            color: #fff;
+            border-left: 4px solid var(--danger);
+            padding: 0.8rem 1.2rem;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Button */
+        .btn {
+            background: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Crumb<span>Tail</span>
+            <span style="font-size: 0.75rem; background: #334155; color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-weight: 500;">Yuktik 26</span>
+        </div>
+        <nav class="nav-links">
+            <a href="/static/index.html" class="nav-link">📍 Customer Tracking</a>
+            <a href="/static/restaurant.html" class="nav-link active">📋 Restaurant Kanban</a>
+            <a href="/static/ops.html" class="nav-link">🌐 Operations Map</a>
+            <a href="/static/chaos.html" class="nav-link chaos">⚡ Chaos Engine</a>
+        </nav>
+    </header>
+
+    <div class="board-header">
+        <div>
+            <h1 style="font-size: 1.25rem; font-weight: 700;">Kitchen Order Kanban Board</h1>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">
+                ⚡ Zero HTTP polling. Real-time WebSocket sync. Enforces strict state machine (illegal moves trigger <strong>HTTP 409 Conflict</strong> snap-back).
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <div id="ws-status" style="font-size: 0.8rem; color: var(--success); font-weight: 600;">● Live WS Connected</div>
+            <button id="btn-add-order" class="btn">+ New Kitchen Order</button>
+        </div>
+    </div>
+
+    <div class="board-container">
+        <!-- 1. Placed -->
+        <div class="column" data-status="placed">
+            <div class="column-header">
+                <span>1. Placed</span>
+                <span class="col-count" id="count-placed">0</span>
+            </div>
+            <div class="cards-list" id="list-placed"></div>
+        </div>
+
+        <!-- 2. Accepted -->
+        <div class="column" data-status="accepted">
+            <div class="column-header">
+                <span>2. Accepted</span>
+                <span class="col-count" id="count-accepted">0</span>
+            </div>
+            <div class="cards-list" id="list-accepted"></div>
+        </div>
+
+        <!-- 3. Preparing -->
+        <div class="column" data-status="preparing">
+            <div class="column-header">
+                <span>3. Preparing</span>
+                <span class="col-count" id="count-preparing">0</span>
+            </div>
+            <div class="cards-list" id="list-preparing"></div>
+        </div>
+
+        <!-- 4. Picked Up -->
+        <div class="column" data-status="picked_up">
+            <div class="column-header">
+                <span>4. Picked Up</span>
+                <span class="col-count" id="count-picked_up">0</span>
+            </div>
+            <div class="cards-list" id="list-picked_up"></div>
+        </div>
+
+        <!-- 5. Delivered -->
+        <div class="column" data-status="delivered">
+            <div class="column-header">
+                <span>5. Delivered</span>
+                <span class="col-count" id="count-delivered">0</span>
+            </div>
+            <div class="cards-list" id="list-delivered"></div>
+        </div>
+
+        <!-- 6. Cancelled -->
+        <div class="column" data-status="cancelled" style="border-color: rgba(239, 68, 68, 0.4);">
+            <div class="column-header" style="color: var(--danger);">
+                <span>6. Cancelled</span>
+                <span class="col-count" id="count-cancelled" style="color: var(--danger);">0</span>
+            </div>
+            <div class="cards-list" id="list-cancelled"></div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="/static/js/ws.js"></script>
+    <script src="/static/js/board.js"></script>
+</body>
+</html>
+

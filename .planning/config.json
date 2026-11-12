@@ -1,0 +1,16 @@
+{
+  "mode": "standard",
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "branching": false,
+    "auto_advance": false
+  },
+  "model_profile": "quality",
+  "project": {
+    "name": "CrumbTail",
+    "description": "Yuktik 26 - Real-time delivery tracking platform powered by Redis and FastAPI"
+  }
+}
+

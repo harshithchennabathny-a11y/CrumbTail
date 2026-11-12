@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-11-13 02:06:24",
+  "total_scenarios": 1000,
+  "scenarios": {
+    "atomic_assignment": {
+      "count": 400,
+      "passed": 400,
+      "double_bookings": 0,
+      "p50_ms": 0.238,
+      "p95_ms": 0.454,
+      "p99_ms": 0.623
+    },
+    "monotonic_gps": {
+      "count": 300,
+      "passed": 300,
+      "stale_packets_dropped": 150,
+      "valid_packets_accepted": 150,
+      "backward_movements": 0
+    },
+    "transactional_outbox": {
+      "count": 150,
+      "passed": 150,
+      "total_sent": 150,
+      "processed_ledger_count": 150,
+      "duplicate_notifications": 0
+    },
+    "stream_replay_and_downsampling": {
+      "count": 150,
+      "passed": 150,
+      "stream_events_replayed": 75,
+      "db_flushed_records": 75,
+      "production_db_write_rate": "33.3 writes/s",
+      "target_db_writes_per_sec": "< 50 writes/s"
+    }
+  },
+  "metrics": {
+    "total_scenarios_tested": 1000,
+    "total_passed": 1000,
+    "pass_rate_percentage": 100.0,
+    "nearest_rider_p95_ms": 0.45,
+    "double_assignments": 0,
+    "duplicate_notifications": 0,
+    "monotonic_violations": 0,
+    "db_writes_per_sec": 33.3,
+    "instance_failover_sla": "< 500 ms"
+  }
+}
