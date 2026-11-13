@@ -172,6 +172,26 @@ def get_pending_outbox_rows(conn: sqlite3.Connection, limit: int = 50) -> List[D
     cursor.close()
     return [dict(r) for r in rows]
 
+def claim_outbox_batch(conn: sqlite3.Connection, limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Atomically claims a batch of pending outbox rows by transitioning state to 'processing'.
+    Prevents race conditions when multiple outbox workers run concurrently.
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, event_key, order_id, status, payload, retry_count
+        FROM outbox
+        WHERE state = 'pending' AND datetime(next_retry_at) <= datetime('now')
+        ORDER BY id ASC LIMIT ?;
+    """, (limit,))
+    rows = cursor.fetchall()
+    if rows:
+        ids = [r["id"] for r in rows]
+        placeholders = ",".join("?" * len(ids))
+        cursor.execute(f"UPDATE outbox SET state = 'processing' WHERE id IN ({placeholders});", ids)
+    cursor.close()
+    return [dict(r) for r in rows]
+
 def mark_outbox_sent(conn: sqlite3.Connection, outbox_id: int) -> None:
     """Marks outbox row as sent."""
     now_iso = datetime.now(timezone.utc).isoformat()

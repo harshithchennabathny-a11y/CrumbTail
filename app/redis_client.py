@@ -1,6 +1,7 @@
 import redis
 import redis.asyncio as aioredis
 import time
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 from app.config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_SCRIPTS_DIR
 
@@ -67,6 +68,27 @@ def ingest_location_atomic(rider_id: str, incoming_seq: int, lat: float, lon: fl
     ]
     args = [rider_id, str(incoming_seq), str(lat), str(lon), ts]
     return int(client.eval(script, len(keys), *keys, *args))
+
+def release_rider(rider_id: str) -> bool:
+    """
+    Frees a rider and re-adds them to the active geospatial index upon delivery/cancellation.
+    """
+    try:
+        client = get_sync_redis()
+        r_key = f"rider:{rider_id}:latest"
+        client.hset(r_key, mapping={
+            "status": "free",
+            "active_order_id": "",
+            "active_order_id_2": "",
+            "updated_at": str(time.time())
+        })
+        pos = client.hmget(r_key, "lat", "lon")
+        if pos and pos[0] and pos[1]:
+            client.geoadd("riders:geo", (float(pos[1]), float(pos[0]), rider_id))
+        return True
+    except Exception as e:
+        print(f"[REDIS WARN] Failed to release rider {rider_id}: {e}")
+        return False
 
 def check_rate_limit_atomic(identifier: str, window_ms: int = 1000, max_requests: int = 30) -> bool:
     """

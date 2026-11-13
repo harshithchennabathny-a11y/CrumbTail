@@ -27,14 +27,23 @@ for _, rider_id in ipairs(candidates) do
     local status = redis.call('HGET', rider_key, 'status') or 'free'
     
     if status == 'free' then
-        -- Lock rider to busy
-        redis.call('HSET', rider_key, 'status', 'busy', 'active_order_id', order_id, 'assigned_at', ts)
-        -- Remove from available geospatial index
-        redis.call('ZREM', KEYS[1], rider_id)
-        -- Bind order cache
-        redis.call('HSET', KEYS[2], 'rider_id', rider_id, 'status', 'accepted', 'updated_at', ts)
-        
-        return rider_id
+        -- Ghost rider gate: check if rider has become stale (no pings in > 300s)
+        local last_update = tonumber(redis.call('HGET', rider_key, 'updated_at') or '0')
+        local current_time = tonumber(ts) or 0
+        if last_update > 0 and current_time > 0 and (current_time - last_update > 300) then
+            -- Purge stale ghost rider from search index
+            redis.call('ZREM', KEYS[1], rider_id)
+            redis.call('HSET', rider_key, 'status', 'offline')
+        else
+            -- Lock rider to busy
+            redis.call('HSET', rider_key, 'status', 'busy', 'active_order_id', order_id, 'assigned_at', ts)
+            -- Remove from available geospatial index
+            redis.call('ZREM', KEYS[1], rider_id)
+            -- Bind order cache
+            redis.call('HSET', KEYS[2], 'rider_id', rider_id, 'status', 'accepted', 'updated_at', ts)
+            
+            return rider_id
+        end
     end
 end
 

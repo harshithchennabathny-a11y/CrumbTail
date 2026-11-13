@@ -13,7 +13,7 @@ from app.crud import (
     check_idempotency,
     record_idempotency
 )
-from app.redis_client import get_sync_redis, assign_rider_atomic, assign_batch_atomic
+from app.redis_client import get_sync_redis, assign_rider_atomic, assign_batch_atomic, release_rider
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -167,6 +167,10 @@ async def update_status(
             })
             r.publish("board:orders", event_payload)
             r.publish(f"track:{order_id}", event_payload)
+            
+            # 5. Release rider back to free pool if terminal state reached
+            if target_status in (OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value) and assigned_rider:
+                release_rider(assigned_rider)
         except Exception as e:
             print(f"[REDIS WARN] Failed to sync order update to Redis: {e}")
 

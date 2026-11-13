@@ -8,17 +8,17 @@ import asyncio
 import httpx
 from app.config import NOTIFICATION_SERVICE_URL
 from app.database import get_db
-from app.crud import get_pending_outbox_rows, mark_outbox_sent, mark_outbox_failed_retry
+from app.crud import claim_outbox_batch, mark_outbox_sent, mark_outbox_failed_retry
 
 def process_outbox_batch(max_batch: int = 50) -> int:
     """
     Processes one batch of pending outbox rows without holding DB connections open across network calls.
-    1. Read pending rows and close connection.
+    1. Atomically claim pending rows ('pending' -> 'processing') and close connection.
     2. Dispatch via HTTP to notification service.
     3. Bulk update sent/failed rows in a rapid commit.
     """
     with get_db() as conn:
-        pending_rows = get_pending_outbox_rows(conn, limit=max_batch)
+        pending_rows = claim_outbox_batch(conn, limit=max_batch)
         
     if not pending_rows:
         return 0
