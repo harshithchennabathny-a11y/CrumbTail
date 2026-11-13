@@ -1,5 +1,5 @@
 /**
- * CrumbTail Restaurant Order Kanban Board Logic
+ * Crumb Trail Restaurant Order Kanban Board Logic
  * - Zero HTTP polling: updates pushed via WebSockets (ws://localhost:8000/8001 /ws/restaurant)
  * - HTML5 Drag & Drop state progression
  * - Enforces state machine: returns HTTP 409 Conflict on illegal moves and snaps card back
@@ -10,6 +10,14 @@ let sourceColumn = null;
 let wsClient = null;
 
 const COLUMNS = ['placed', 'accepted', 'preparing', 'picked_up', 'delivered', 'cancelled'];
+const NEXT_STATE = {
+    'placed': 'accepted',
+    'accepted': 'preparing',
+    'preparing': 'picked_up',
+    'picked_up': 'delivered',
+    'delivered': null,
+    'cancelled': null
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     loadInitialOrders();
@@ -44,6 +52,7 @@ function initWebSocket() {
         },
         onStatus: (status, info) => {
             const statusEl = document.getElementById('ws-status');
+            if (!statusEl) return;
             if (status === 'connected') {
                 statusEl.textContent = `● Live WS Connected (Port ${info.port})`;
                 statusEl.style.color = 'var(--success)';
@@ -110,7 +119,6 @@ function renderOrderCard(order) {
     card.dataset.orderId = order.id;
     card.dataset.status = order.status;
 
-    // Build DOM elements safely to prevent DOM XSS
     card.innerHTML = '';
     const idEl = document.createElement('div');
     idEl.className = 'card-id';
@@ -130,7 +138,68 @@ function renderOrderCard(order) {
         card.appendChild(riderEl);
     }
 
+    // Testing Action buttons directly on card
+    const nextTarget = NEXT_STATE[order.status];
+    if (nextTarget) {
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const btnNext = document.createElement('button');
+        btnNext.className = 'btn-card next';
+        btnNext.textContent = `Next: ${nextTarget} ➔`;
+        btnNext.onclick = (e) => {
+            e.stopPropagation();
+            advanceOrderCard(order.id, nextTarget, card);
+        };
+        actions.appendChild(btnNext);
+
+        const btnBad = document.createElement('button');
+        btnBad.className = 'btn-card bad';
+        btnBad.textContent = `409 Test`;
+        btnBad.title = 'Attempt illegal jump back to placed';
+        btnBad.onclick = (e) => {
+            e.stopPropagation();
+            advanceOrderCard(order.id, 'placed', card);
+        };
+        actions.appendChild(btnBad);
+
+        card.appendChild(actions);
+    }
+
     list.appendChild(card);
+}
+
+async function advanceOrderCard(orderId, targetStatus, card) {
+    try {
+        const res = await fetch(`/orders/${orderId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: targetStatus,
+                latitude: 12.9716,
+                longitude: 77.5946
+            })
+        });
+
+        if (res.status === 409) {
+            const err = await res.json();
+            card.classList.add('shake');
+            setTimeout(() => card.classList.remove('shake'), 600);
+            showToast(`⚠️ 409 Conflict: ${err.detail || 'Illegal order state transition!'}`, 'danger');
+            return;
+        }
+
+        if (res.ok) {
+            const updated = await res.json();
+            const targetList = document.getElementById(`list-${targetStatus}`);
+            if (targetList) targetList.appendChild(card);
+            card.dataset.status = targetStatus;
+            updateCounts();
+            showToast(`✅ Order ${orderId} moved to ${targetStatus}!`, 'success');
+        }
+    } catch (e) {
+        showToast(`Request failed: ${e.message}`, 'danger');
+    }
 }
 
 function updateCounts() {
@@ -148,12 +217,12 @@ function handleDragStart(e) {
     sourceColumn = this.parentElement.id.replace('list-', '');
     this.classList.add('dragging');
     e.dataTransfer.setData('text/plain', this.dataset.orderId);
-    e.dataTransfer.effectAllowed = 'move';
 }
 
-function handleDragEnd(e) {
+function handleDragEnd() {
     this.classList.remove('dragging');
-    document.querySelectorAll('.cards-list').forEach(l => l.classList.remove('drag-over'));
+    draggedCard = null;
+    sourceColumn = null;
 }
 
 function setupDropZones() {
@@ -163,7 +232,6 @@ function setupDropZones() {
 
         list.addEventListener('dragover', (e) => {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
             list.classList.add('drag-over');
         });
 
@@ -209,7 +277,7 @@ function setupDropZones() {
                     // Shake card and display conflict toast
                     draggedCard.classList.add('shake');
                     setTimeout(() => draggedCard.classList.remove('shake'), 600);
-                    showToast(`⚠️ 409 Conflict: ${err.detail || 'Illegal order state transition!'}`);
+                    showToast(`⚠️ 409 Conflict: ${err.detail || 'Illegal order state transition!'}`, 'danger');
                     return;
                 }
 
@@ -229,21 +297,23 @@ function setupDropZones() {
                     }
                     riderBadge.textContent = `🛵 Rider: ${riderId}`;
                 }
+                showToast(`✅ Order ${orderId} moved to ${targetStatus}!`, 'success');
             } catch (err) {
-                // Network or other error: snap back
+                // Snap back on error
                 const originalList = document.getElementById(`list-${fromStatus}`);
                 if (originalList) originalList.appendChild(draggedCard);
                 updateCounts();
-                showToast(`❌ Error: ${err.message}`);
+                showToast(`❌ Error: ${err.message}`, 'danger');
             }
         });
     });
 }
 
-function showToast(message) {
+function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
+    if (!container) return;
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = `toast ${type}`;
     toast.innerHTML = `<span>${message}</span>`;
     container.appendChild(toast);
     setTimeout(() => {
@@ -253,6 +323,7 @@ function showToast(message) {
 }
 
 function bindHeaderControls() {
+    // 1. Single test order
     document.getElementById('btn-add-order').addEventListener('click', async () => {
         try {
             const randCust = "cust_" + Math.floor(Math.random() * 900 + 100);
@@ -267,9 +338,34 @@ function bindHeaderControls() {
             const newOrder = await res.json();
             renderOrderCard(newOrder);
             updateCounts();
+            showToast(`🚀 New kitchen order placed: ${newOrder.id}`, 'success');
         } catch (err) {
-            showToast('Failed to create order: ' + err.message);
+            showToast('Failed to create order: ' + err.message, 'danger');
         }
     });
-}
 
+    // 2. Surge 5 orders
+    const btnSurge = document.getElementById('btn-surge-orders');
+    if (btnSurge) {
+        btnSurge.addEventListener('click', async () => {
+            showToast('⚡ Spawning 5 surge orders...', 'info');
+            for (let i = 0; i < 5; i++) {
+                const randCust = "cust_surge_" + Math.floor(Math.random() * 900 + 100);
+                const res = await fetch('/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_id: randCust,
+                        restaurant_id: "rest_kitchen_hub"
+                    })
+                });
+                if (res.ok) {
+                    const newOrder = await res.json();
+                    renderOrderCard(newOrder);
+                }
+            }
+            updateCounts();
+            showToast('✅ 5 surge orders successfully queued on Kanban!', 'success');
+        });
+    }
+}

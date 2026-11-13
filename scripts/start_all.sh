@@ -58,3 +58,4 @@ echo "Press Ctrl+C to terminate all cluster processes."
 
 trap "kill $PID_NOTIF $PID_OUTBOX $PID_A $PID_B 2>/dev/null || true" EXIT INT TERM
 wait
+

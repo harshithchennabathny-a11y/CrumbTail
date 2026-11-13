@@ -10,12 +10,12 @@ let canvas, ctx;
 let wsClient = null;
 const riders = new Map();
 
-// Bengaluru spatial bounds
+// Bengaluru spatial bounds (expanded for full Bangalore corridor)
 const BENGALURU_BOUNDS = {
-    minLat: 12.9400,
-    maxLat: 12.9900,
-    minLon: 77.5700,
-    maxLon: 77.6600
+    minLat: 12.8300,
+    maxLat: 13.0600,
+    minLon: 77.5400,
+    maxLon: 77.7600
 };
 
 // Pan & Zoom
@@ -37,7 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
     startMetricsLoop();
     bindCanvasControls();
-    generateBaselineFleet(150); // Pre-populate radar with active fleet
+    fetchRealFleet();
+    setInterval(fetchRealFleet, 3000);
     requestAnimationFrame(renderLoop);
 });
 
@@ -207,6 +208,23 @@ function initWebSocket() {
 }
 
 function handleLiveOpsPacket(data) {
+    if (data.type === 'riders_snapshot' && Array.isArray(data.riders)) {
+        data.riders.forEach(r => {
+            riders.set(r.rider_id, {
+                id: r.rider_id,
+                lat: parseFloat(r.lat),
+                lon: parseFloat(r.lon),
+                status: r.status || 'free',
+                state: r.state || 'idle',
+                activeOrder: r.active_order_id,
+                seq: r.seq || 1,
+                updatedAt: Date.now()
+            });
+        });
+        updateFilterCounts();
+        return;
+    }
+
     if (data.type === 'location' || (data.rider_id && data.lat && data.lon)) {
         const id = data.rider_id;
         const lat = parseFloat(data.lat);
@@ -219,11 +237,35 @@ function handleLiveOpsPacket(data) {
             lat: lat,
             lon: lon,
             status: data.status || (existing ? existing.status : 'free'),
+            state: data.state || (existing ? existing.state : 'idle'),
             seq: seq,
             updatedAt: Date.now()
         });
         updateFilterCounts();
     }
+}
+
+async function fetchRealFleet() {
+    try {
+        const res = await fetch('/demo/riders');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.riders && data.riders.length > 0) {
+                data.riders.forEach(r => {
+                    riders.set(r.rider_id, {
+                        id: r.rider_id,
+                        lat: r.lat,
+                        lon: r.lon,
+                        status: r.status,
+                        state: r.state,
+                        seq: r.seq,
+                        updatedAt: Date.now()
+                    });
+                });
+                updateFilterCounts();
+            }
+        }
+    } catch (e) {}
 }
 
 function updateFilterCounts() {

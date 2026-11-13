@@ -41,6 +41,73 @@ def assign_rider_atomic(lon: float, lat: float, order_id: str, radius_km: float 
     args = [str(lon), str(lat), str(radius_km), order_id, now_ts]
     return client.eval(script, len(keys), *keys, *args)
 
+def claim_rider_atomic(rider_id: str, order_id: str) -> Optional[str]:
+    """Claims a specific rider atomically via claim_rider.lua."""
+    client = get_sync_redis()
+    script = get_lua_script("claim_rider")
+    now_ts = str(int(time.time()))
+    keys = ["riders:geo", f"order:{order_id}"]
+    args = [rider_id, order_id, now_ts]
+    return client.eval(script, len(keys), *keys, *args)
+
+def assign_rider_with_astar(lon: float, lat: float, order_id: str, radius_km: float = 8.0) -> Optional[str]:
+    """
+    Rider selection:
+    1. GEOSEARCH returns K=5-8 nearest candidates by straight-line distance (<50 ms target).
+    2. A* computes road ETA from rider location to pickup for each candidate.
+    3. Lowest ETA candidate is claimed atomically; if race lost, next candidate is tried.
+    """
+    client = get_sync_redis()
+    t0 = time.time()
+    
+    # Fast straight-line geospatial search (< 50ms)
+    try:
+        candidates = client.geosearch(
+            "riders:geo",
+            longitude=lon,
+            latitude=lat,
+            radius=radius_km,
+            unit="km",
+            sort="ASC",
+            count=8
+        )
+    except Exception:
+        return assign_rider_atomic(lon=lon, lat=lat, order_id=order_id, radius_km=radius_km)
+        
+    geo_ms = (time.time() - t0) * 1000
+    try:
+        client.lpush("metrics:geo_latency_ms", str(geo_ms))
+        client.ltrim("metrics:geo_latency_ms", 0, 99)
+    except Exception:
+        pass
+
+    if not candidates:
+        return None
+
+    # Step 2: Road ETA scoring via A*
+    try:
+        from app.routing.astar import compute_road_eta_sec
+        candidate_etas = []
+        for rid in candidates:
+            pos = client.hmget(f"rider:{rid}:latest", "lat", "lon", "status")
+            if pos and pos[0] and pos[1] and (pos[2] or "free") == "free":
+                rlat, rlon = float(pos[0]), float(pos[1])
+                eta_sec = compute_road_eta_sec(rlat, rlon, lat, lon)
+                candidate_etas.append((eta_sec, rid))
+
+        candidate_etas.sort(key=lambda x: x[0])
+
+        # Step 3: Atomic claim in order of lowest ETA
+        for _, rid in candidate_etas:
+            claimed = claim_rider_atomic(rid, order_id)
+            if claimed:
+                return claimed
+    except Exception:
+        pass
+
+    # Fallback to direct Lua assignment
+    return assign_rider_atomic(lon=lon, lat=lat, order_id=order_id, radius_km=radius_km)
+
 def assign_batch_atomic(lon: float, lat: float, order_id_1: str, order_id_2: str, radius_km: float = 5.0) -> Optional[str]:
     """
     Executes assign_batch.lua atomically for 2 orders competing for 1 rider.

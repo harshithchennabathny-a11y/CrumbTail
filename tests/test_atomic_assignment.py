@@ -10,9 +10,9 @@ from app.redis_client import get_sync_redis, assign_rider_atomic, assign_batch_a
 def clean_redis():
     """Flushes test keys from Redis before each test."""
     r = get_sync_redis()
-    r.delete("riders:geo")
+    r.delete("riders:geo", "rider:rider_alpha:latest", "rider:rider_jackpot:latest", "rider:rider_batch_pro:latest")
     yield
-    r.delete("riders:geo")
+    r.delete("riders:geo", "rider:rider_alpha:latest", "rider:rider_jackpot:latest", "rider:rider_batch_pro:latest")
 
 def test_nearest_rider_atomic_assignment():
     """Verifies that nearest free rider is atomically matched and locked."""

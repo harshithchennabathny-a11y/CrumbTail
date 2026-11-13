@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from app.config import INSTANCE_ID, PORT, STATIC_DIR
 from app.database import init_db
-from app.routers import health, orders, locations, chaos
+from app.routers import health, orders, locations, chaos, demo, riders
 from app import websockets
 
 @asynccontextmanager
@@ -45,6 +45,8 @@ def create_app(instance_id: str = None) -> FastAPI:
     app.include_router(orders.router)
     app.include_router(locations.router)
     app.include_router(chaos.router)
+    app.include_router(demo.router)
+    app.include_router(riders.router)
     app.include_router(websockets.router)
 
     # Ensure static directory exists and mount it

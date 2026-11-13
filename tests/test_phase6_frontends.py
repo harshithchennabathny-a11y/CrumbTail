@@ -15,10 +15,10 @@ client_b = TestClient(app_b)
 def test_phase6_all_dashboards_served_on_both_instances():
     """Verifies all 4 dashboards and assets are served on both Instance A and Instance B."""
     dashboards = [
-        ("/static/index.html", "Crumb Tail — Live Customer Tracking"),
-        ("/static/restaurant.html", "Crumb Tail — Restaurant Order Kanban"),
-        ("/static/ops.html", "Crumb Tail — Operations Map & 2,000 Rider Radar"),
-        ("/static/chaos.html", "Crumb Tail — Chaos Engineering & Adversarial Testbed")
+        ("/static/index.html", "Crumb Trail — Live Customer Tracking"),
+        ("/static/restaurant.html", "Crumb Trail — Restaurant Order Kanban"),
+        ("/static/ops.html", "Crumb Trail — Operations Map & 2,000 Rider Radar"),
+        ("/static/chaos.html", "Crumb Trail — Chaos Engineering & Adversarial Testbed")
     ]
     
     for path, title in dashboards:

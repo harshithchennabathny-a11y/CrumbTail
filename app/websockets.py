@@ -245,3 +245,38 @@ async def operations_ws(websocket: WebSocket):
         except Exception:
             pass
         _ops_viewers.discard(websocket)
+
+@router.websocket("/ws/ops-riders")
+async def ops_riders_ws(websocket: WebSocket):
+    """Streams batched rider snapshots every 500ms for the ops map canvas."""
+    await websocket.accept()
+    r_async = get_async_redis()
+    try:
+        while True:
+            # Read all rider latest states
+            riders = []
+            # Use scan to get all rider:*:latest keys
+            async for key in r_async.scan_iter("rider:*:latest"):
+                data = await r_async.hgetall(key)
+                if data:
+                    rid = key.replace("rider:", "").replace(":latest", "")
+                    try:
+                        riders.append({
+                            "rider_id": rid,
+                            "lat": float(data.get("lat", 0)),
+                            "lon": float(data.get("lon", 0)),
+                            "state": data.get("state", "idle"),
+                            "status": data.get("status", "free"),
+                            "active_order_id": data.get("active_order_id", ""),
+                        })
+                    except (ValueError, TypeError):
+                        pass
+            await websocket.send_text(json.dumps({"type": "riders_snapshot", "riders": riders}))
+            await asyncio.sleep(0.5)
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        try:
+            await r_async.aclose()
+        except Exception:
+            pass

@@ -3,47 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crumb Tail — Chaos Engineering & Adversarial Testbed</title>
+    <title>Crumb Trail — Chaos Engineering & Adversarial Testbed</title>
     <style>
         :root {
             --bg-dark: #090d16;
             --panel-bg: #111827;
             --card-bg: #1a2234;
             --accent: #38bdf8;
-            --success: #22c55e;
+            --success: #10b981;
             --warning: #f59e0b;
             --danger: #f43f5e;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --border: #334155;
             --code-bg: #030712;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
+        body { background: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
         /* Navigation Bar */
         header {
             background: #111827;
             border-bottom: 1px solid var(--border);
-            padding: 0.6rem 1.5rem;
+            padding: 0.75rem 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            height: 64px;
+            z-index: 50;
         }
-        .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.15rem; color: #fff; }
+        .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 800; font-size: 1.25rem; color: #fff; }
         .brand span { color: var(--accent); }
-        .nav-links { display: flex; gap: 1rem; }
-        .nav-link { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 6px; transition: all 0.2s; }
+        .brand-badge { font-size: 0.7rem; background: rgba(244, 63, 94, 0.2); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.35); padding: 3px 8px; border-radius: 9999px; font-weight: 600; }
+        .nav-links { display: flex; gap: 0.75rem; align-items: center; }
+        .nav-link { color: var(--text-muted); text-decoration: none; font-size: 0.88rem; font-weight: 500; padding: 0.45rem 0.9rem; border-radius: 8px; transition: all 0.2s; }
         .nav-link:hover, .nav-link.active { color: #fff; background: var(--card-bg); }
-        .nav-link.chaos { color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4); }
+        .nav-link.chaos { color: #fb7185; border: 1px solid rgba(251, 113, 133, 0.3); }
 
         /* Chaos Workspace */
         .chaos-container {
             display: grid;
-            grid-template-columns: 460px 1fr;
+            grid-template-columns: 500px 1fr;
             flex: 1;
             overflow: hidden;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 64px);
         }
 
         /* Sidebar Strikes */
@@ -53,49 +57,51 @@
             padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
+            gap: 1.15rem;
             overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
         }
 
         .strike-card {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
+            border-radius: 10px;
+            padding: 1.1rem;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
-            transition: border-color 0.2s;
+            gap: 0.55rem;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
-        .strike-card:hover { border-color: rgba(244, 63, 94, 0.6); }
+        .strike-card:hover { border-color: rgba(244, 63, 94, 0.7); transform: translateY(-1px); }
 
         .strike-title {
-            font-size: 0.95rem;
-            font-weight: 700;
+            font-size: 0.92rem;
+            font-weight: 800;
             color: #fff;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: space-between;
         }
-        .strike-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+        .strike-desc { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
         .strike-badge {
             font-size: 0.7rem;
             background: rgba(244, 63, 94, 0.15);
             color: var(--danger);
-            padding: 2px 6px;
+            padding: 2px 7px;
             border-radius: 4px;
-            width: fit-content;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         .btn-strike {
             background: #27272a;
             color: #fff;
-            border: 1px solid rgba(255,255,255,0.1);
-            padding: 0.6rem 1rem;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 0.8rem;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 0.65rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.82rem;
             cursor: pointer;
             transition: all 0.2s;
             display: flex;
@@ -103,35 +109,39 @@
             justify-content: center;
             gap: 0.5rem;
         }
-        .btn-strike:hover { background: var(--danger); border-color: var(--danger); box-shadow: 0 0 12px rgba(244, 63, 94, 0.4); }
+        .btn-strike:hover { background: #3f3f46; border-color: var(--accent); }
+        .btn-strike.danger { background: rgba(244, 63, 94, 0.2); border-color: var(--danger); color: #fda4af; }
+        .btn-strike.danger:hover { background: rgba(244, 63, 94, 0.35); }
 
-        /* Terminal Console */
+        /* Live Terminal Workspace */
         .console-workspace {
-            background: var(--code-bg);
             display: flex;
             flex-direction: column;
+            background: var(--code-bg);
+            font-family: var(--font-mono);
             overflow: hidden;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         }
         .console-header {
-            background: #0b0f19;
+            background: #0f172a;
             border-bottom: 1px solid var(--border);
-            padding: 0.6rem 1.25rem;
+            padding: 0.85rem 1.5rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             color: var(--text-muted);
         }
         .console-logs {
             flex: 1;
-            padding: 1.25rem;
+            padding: 1.5rem;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.65rem;
             font-size: 0.85rem;
             line-height: 1.5;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
         }
 
         .log-entry {
@@ -139,8 +149,8 @@
             gap: 0.75rem;
             align-items: flex-start;
         }
-        .log-ts { color: #64748b; font-size: 0.75rem; flex-shrink: 0; }
-        .log-tag { font-weight: 700; flex-shrink: 0; }
+        .log-ts { color: #64748b; font-size: 0.76rem; flex-shrink: 0; }
+        .log-tag { font-weight: 800; flex-shrink: 0; }
         .log-tag.info { color: var(--accent); }
         .log-tag.success { color: var(--success); }
         .log-tag.warning { color: var(--warning); }
@@ -149,11 +159,11 @@
         .log-json {
             background: #0f172a;
             border: 1px solid #1e293b;
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
-            margin-top: 0.25rem;
+            padding: 0.65rem 0.85rem;
+            border-radius: 8px;
+            margin-top: 0.35rem;
             color: #38bdf8;
-            font-size: 0.78rem;
+            font-size: 0.8rem;
             white-space: pre-wrap;
         }
     </style>
@@ -161,9 +171,9 @@
 <body>
     <header>
         <div class="brand">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            Crumb<span>Tail</span>
-            <span style="font-size: 0.75rem; background: rgba(244, 63, 94, 0.2); color: #f43f5e; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Chaos Engine</span>
+            <span style="font-size: 1.4rem;">🍞</span>
+            Crumb<span> Trail</span>
+            <span class="brand-badge">Chaos Engineering Testbed</span>
         </div>
         <nav class="nav-links">
             <a href="/static/index.html" class="nav-link">📍 Customer Tracking</a>
@@ -177,14 +187,15 @@
         <!-- Strikes Sidebar -->
         <aside class="strikes-sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2 style="font-size: 1.1rem; font-weight: 700;">Adversarial Testbed</h2>
-                <span class="strike-badge">Judges Verification</span>
+                <h2 style="font-size: 1.15rem; font-weight: 800; color: #fff;">Adversarial Testbed</h2>
+                <span class="strike-badge">Judges Verification Suite</span>
             </div>
 
             <!-- Chaos 1: Stale GPS -->
             <div class="strike-card">
                 <div class="strike-title">
                     <span>1. Stale / Backward GPS Injection</span>
+                    <span style="font-size:0.7rem; color:var(--accent);">LUA GUARD</span>
                 </div>
                 <div class="strike-desc">
                     Sets seq=10, then injects seq=5. Proves Lua script rejects packet with 0 position rollback.
@@ -196,6 +207,7 @@
             <div class="strike-card">
                 <div class="strike-title">
                     <span>2. Race Hammer (20 Orders for 1 Rider)</span>
+                    <span style="font-size:0.7rem; color:var(--success);">ZERO DOUBLE BOOKING</span>
                 </div>
                 <div class="strike-desc">
                     Fires 20 concurrent order assignments in a single async burst. Proves atomic Redis lock yields exactly 0 double bookings.
@@ -207,6 +219,7 @@
             <div class="strike-card">
                 <div class="strike-title">
                     <span>3. Competing Batch Assignment</span>
+                    <span style="font-size:0.7rem; color:var(--accent);">ALL-OR-NOTHING</span>
                 </div>
                 <div class="strike-desc">
                     Tests atomic <code>assign_batch.lua</code> to ensure both orders are assigned to 1 rider atomically without split allocation.
@@ -218,6 +231,7 @@
             <div class="strike-card">
                 <div class="strike-title">
                     <span>4. Notification Service & Ledger</span>
+                    <span style="font-size:0.7rem; color:var(--warning);">PORT 9000</span>
                 </div>
                 <div class="strike-desc">
                     Queries standalone notification service (port 9000). Proves outbox idempotency key ledger ensures 0 duplicate alerts.
@@ -229,17 +243,19 @@
             <div class="strike-card">
                 <div class="strike-title">
                     <span>5. Kill Active Instance A (Failover &lt; 500ms)</span>
+                    <span style="font-size:0.7rem; color:var(--danger);">DUAL-INSTANCE</span>
                 </div>
                 <div class="strike-desc">
                     Kills Instance A (port 8000). Demonstrates client automatically reconnects to Instance B (port 8001) in &lt; 500ms with stream replay.
                 </div>
-                <button id="btn-chaos-kill" class="btn-strike" style="background: rgba(244, 63, 94, 0.2); border-color: var(--danger);">💥 Kill Instance A</button>
+                <button id="btn-chaos-kill" class="btn-strike danger">💥 Kill Instance A</button>
             </div>
 
             <!-- Chaos 6: Redis Interruption & Degraded Mode -->
             <div class="strike-card">
                 <div class="strike-title">
                     <span>6. Redis Outage & Degraded Mode</span>
+                    <span style="font-size:0.7rem; color:var(--accent);">SQLITE SURVIVAL</span>
                 </div>
                 <div class="strike-desc">
                     Tests cluster health during Redis interruption. Proves system reports 'degraded' (HTTP 200) while orders remain safe in SQLite.
@@ -258,14 +274,14 @@
                     <strong style="color: #fff; margin-left: 0.5rem;">Chaos Execution Console</strong>
                 </div>
                 <div>
-                    <button id="btn-clear-console" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:0.75rem;">Clear Console</button>
+                    <button id="btn-clear-console" style="background:#1e293b; border:1px solid var(--border); color:#cbd5e1; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.75rem; font-weight:600;">Clear Console</button>
                 </div>
             </div>
             <div class="console-logs" id="console-logs">
                 <div class="log-entry">
                     <span class="log-ts">[00:00:00]</span>
                     <span class="log-tag info">[SYSTEM]</span>
-                    <span class="log-msg">CrumbTail Chaos Console initialized. Ready to execute adversarial tests against running cluster.</span>
+                    <span class="log-msg">Crumb Trail Chaos Console initialized. Ready to execute adversarial tests against running cluster.</span>
                 </div>
             </div>
         </main>
@@ -274,4 +290,3 @@
     <script src="/static/js/chaos.js"></script>
 </body>
 </html>
-

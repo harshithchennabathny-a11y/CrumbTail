@@ -50,13 +50,15 @@ async def ingest_location(loc: LocationIngest, response: Response):
     # 3. Sample for batched SQLite persistence
     record_location_sample(loc.rider_id, loc.lat, loc.lon, loc.seq)
 
-    # 4. Record throughput metric for live ops dashboard
+    # 4. Record throughput metric and update rider state for live ops dashboard
     try:
         r = get_sync_redis()
         now_sec = int(time.time())
         mkey = f"metrics:updates:{now_sec}"
         r.incr(mkey)
         r.expire(mkey, 10)
+        if loc.state:
+            r.hset(f"rider:{loc.rider_id}:latest", "state", loc.state)
     except Exception:
         pass
 
@@ -80,6 +82,49 @@ async def list_available_riders():
             results.append({"rider_id": rider_id, "lat": lat, "lon": lon, "status": "free"})
     return {"count": len(results), "riders": results}
 
+@router.get("/riders/all")
+async def list_all_riders():
+    """Returns all riders with their current state, coordinates and active orders."""
+    r = get_sync_redis()
+    riders = []
+    for key in r.scan_iter("rider:*:latest"):
+        data = r.hgetall(key)
+        if data:
+            rid = key.replace("rider:", "").replace(":latest", "")
+            try:
+                riders.append({
+                    "rider_id": rid,
+                    "lat": float(data.get("lat", 12.9716)),
+                    "lon": float(data.get("lon", 77.5946)),
+                    "seq": int(data.get("seq", 0)),
+                    "status": data.get("status", "free"),
+                    "state": data.get("state", "idle"),
+                    "active_order_id": data.get("active_order_id", ""),
+                    "active_order_id_2": data.get("active_order_id_2", ""),
+                })
+            except (ValueError, TypeError):
+                pass
+    return {"count": len(riders), "riders": riders}
+
+@router.get("/riders/{rider_id}/state")
+async def get_rider_state(rider_id: str):
+    """Retrieves full runtime state of a specific rider."""
+    r = get_sync_redis()
+    data = r.hgetall(f"rider:{rider_id}:latest")
+    if not data:
+        return {"rider_id": rider_id, "found": False}
+    return {
+        "rider_id": rider_id,
+        "found": True,
+        "lat": float(data.get("lat", 12.9716)),
+        "lon": float(data.get("lon", 77.5946)),
+        "seq": int(data.get("seq", 0)),
+        "status": data.get("status", "free"),
+        "state": data.get("state", "idle"),
+        "active_order_id": data.get("active_order_id", ""),
+        "active_order_id_2": data.get("active_order_id_2", ""),
+    }
+
 @router.post("/riders/{rider_id}/register")
 async def register_rider(rider_id: str, lat: float = 12.9716, lon: float = 77.5946):
     """Initializes or resets a free rider at specified coordinates."""
@@ -88,6 +133,7 @@ async def register_rider(rider_id: str, lat: float = 12.9716, lon: float = 77.59
     r.geoadd("riders:geo", (lon, lat, rider_id))
     r.hset(f"rider:{rider_id}:latest", mapping={
         "status": "free",
+        "state": "idle",
         "lat": str(lat),
         "lon": str(lon),
         "seq": "0",

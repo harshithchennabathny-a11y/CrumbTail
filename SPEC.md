@@ -231,4 +231,22 @@ Format:
   "metadata": { "order_id": "ord_8891", "rider_id": "r_42", "duration_ms": 12 }
 }
 ```
-All frontend dashboards include a live scrolling terminal displaying this timeline so judges can observe operations in real time.
+---
+
+## 9. Bangalore Live Demo Contract & A* Routing Specification
+
+### 9.1 Demo Control Endpoints
+- `POST /demo/reset`: Flushes demo state and seeds 15 Bangalore restaurants and 50 riders with monotonic starting sequence numbers.
+- `POST /demo/place-orders`: Concurrently places 120 orders spread across Bangalore localities. Surplus orders enter Redis pending queue `orders:pending`.
+- `POST /demo/dispatcher`: Atomic worker pass matching pending orders to available riders using A* road ETA. Safe across multiple instances via `SETNX dispatching:{order_id} 1 EX 8`.
+- `GET /demo/route?lat1=&lon1=&lat2=&lon2=`: Pure Python A* (heapq + haversine heuristic) road path polyline with KDTree snapping and thread pool offloading.
+- `GET /demo/metrics`: Real-time system gauges (updates/sec, route p95, geosearch p95, assign p95, pending count, auditor violations).
+- `GET /demo/auditor`: Invariant auditor verifying zero double-bookings, strict batch bounds (same restaurant, drop-offs ≤ 500m), and monotonic packet ordering.
+
+### 9.2 Redis Keys
+- `orders:pending`: Redis ZSET of order IDs scored by timestamp (FIFO queue).
+- `metrics:route_latency_ms`: List of A* road route pathfinding latencies.
+- `metrics:geo_latency_ms`: List of Redis GEOSEARCH latencies (< 50 ms).
+- `metrics:assign_latency_ms`: List of atomic Lua assignment latencies.
+- `auditor:violations`: Integer count of detected invariant violations (must stay 0).
+

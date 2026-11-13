@@ -52,4 +52,5 @@ class LocationIngest(BaseModel):
     seq: int = Field(..., description="Monotonically increasing sequence number")
     timestamp: Optional[int] = Field(default=None, description="Unix timestamp (seconds)")
     device_id: Optional[str] = Field(default=None, description="Device identifier for rate limiting")
+    state: Optional[str] = Field(default=None, description="Current rider state (idle, to_pickup, etc.)")
 

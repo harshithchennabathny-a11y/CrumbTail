@@ -13,7 +13,15 @@ from app.crud import (
     check_idempotency,
     record_idempotency
 )
-from app.redis_client import get_sync_redis, assign_rider_atomic, assign_batch_atomic, release_rider
+from app.redis_client import (
+    get_sync_redis,
+    assign_rider_atomic,
+    assign_rider_with_astar,
+    assign_batch_atomic,
+    release_rider
+)
+from app.config import BATCH_DROPOFF_RADIUS_M
+from app.routing.astar import haversine_m
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -129,16 +137,24 @@ async def update_status(
         # 3. If transitioning to 'accepted', trigger atomic nearest rider assignment
         if target_status == OrderStatus.ACCEPTED.value and not assigned_rider:
             try:
-                # Use default Bengaluru center or restaurant coordinates
-                assigned_rider = assign_rider_atomic(
-                    lon=77.5946,
-                    lat=12.9716,
+                r = get_sync_redis()
+                # Check for cached restaurant coordinates
+                rest_lat = float(r.hget(f"order:{order_id}", "rest_lat") or 12.9716)
+                rest_lon = float(r.hget(f"order:{order_id}", "rest_lon") or 77.5946)
+                
+                assigned_rider = assign_rider_with_astar(
+                    lon=rest_lon,
+                    lat=rest_lat,
                     order_id=order_id,
-                    radius_km=5.0
+                    radius_km=8.0
                 )
                 if assigned_rider:
                     set_order_rider(conn, order_id, assigned_rider)
                     order_res["rider_id"] = assigned_rider
+                    r.zrem("orders:pending", order_id)
+                else:
+                    # No rider currently available -> queue in pending zset
+                    r.zadd("orders:pending", {order_id: float(time.time())})
             except Exception as e:
                 print(f"[REDIS WARN] Assignment error: {e}")
 
@@ -171,6 +187,15 @@ async def update_status(
             # 5. Release rider back to free pool if terminal state reached
             if target_status in (OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value) and assigned_rider:
                 release_rider(assigned_rider)
+                # Auto-dispatch any pending order to newly freed rider
+                try:
+                    from app.routers.demo import run_dispatcher
+                    import asyncio
+                    # Attempt immediate dispatch if pending orders exist
+                    if r.zcard("orders:pending") > 0:
+                        asyncio.create_task(run_dispatcher(batch=5))
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[REDIS WARN] Failed to sync order update to Redis: {e}")
 
@@ -184,8 +209,35 @@ async def update_status(
 async def batch_assign(req: BatchAssignRequest):
     """
     Atomically assigns 2 competing orders to 1 free rider or changes nothing.
-    Enforces atomic batch assignment guarantee for hackathon judges.
+    Enforces atomic batch assignment guarantee:
+    - Same restaurant requirement
+    - Drop-off distance within BATCH_DROPOFF_RADIUS_M (default 500m)
     """
+    r = get_sync_redis()
+    
+    # Verify same restaurant & close dropoffs if order hashes are stored
+    o1_rest = r.hget(f"order:{req.order_id_1}", "restaurant_id")
+    o2_rest = r.hget(f"order:{req.order_id_2}", "restaurant_id")
+    if o1_rest and o2_rest and o1_rest != o2_rest:
+        return {
+            "success": False,
+            "rider_id": None,
+            "message": f"Batch rejected: orders from different restaurants ({o1_rest} vs {o2_rest})"
+        }
+        
+    o1_dlat = r.hget(f"order:{req.order_id_1}", "delivery_lat")
+    o1_dlon = r.hget(f"order:{req.order_id_1}", "delivery_lon")
+    o2_dlat = r.hget(f"order:{req.order_id_2}", "delivery_lat")
+    o2_dlon = r.hget(f"order:{req.order_id_2}", "delivery_lon")
+    if o1_dlat and o1_dlon and o2_dlat and o2_dlon:
+        dist_m = haversine_m(float(o1_dlat), float(o1_dlon), float(o2_dlat), float(o2_dlon))
+        if dist_m > BATCH_DROPOFF_RADIUS_M:
+            return {
+                "success": False,
+                "rider_id": None,
+                "message": f"Batch rejected: drop-offs exceed {BATCH_DROPOFF_RADIUS_M}m ({dist_m:.0f}m)"
+            }
+            
     rider_id = assign_batch_atomic(
         lon=req.center_lon,
         lat=req.center_lat,

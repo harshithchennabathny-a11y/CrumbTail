@@ -33,7 +33,7 @@ class VirtualRider:
         self.mode = mode
         self.lat = random.uniform(BENGALURU_BOUNDS["min_lat"], BENGALURU_BOUNDS["max_lat"])
         self.lon = random.uniform(BENGALURU_BOUNDS["min_lon"], BENGALURU_BOUNDS["max_lon"])
-        self.seq = 1
+        self.seq = int(time.time() * 1000)
         self.heading = random.uniform(0, 360) # degrees
         self.speed = random.uniform(0.0001, 0.0003) # approx 20-40 km/h in degrees
 
@@ -55,7 +55,7 @@ class VirtualRider:
             # Inject a backward/duplicate sequence number
             send_seq = max(1, self.seq - random.randint(1, 5))
         else:
-            self.seq += 1
+            self.seq += random.randint(1, 3)
             send_seq = self.seq
 
         return {

@@ -100,3 +100,4 @@ python scripts/live_demo.py
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: System topology, data flow, and failover sequence.
 - **[DECISION_RECORD.md](DECISION_RECORD.md)**: 1-Page ADR answering 8 critical judge defence questions.
 - **[BENCHMARK_SCORECARD.json](BENCHMARK_SCORECARD.json)**: Real statistical audit scorecard from 1,000 parallel test scenarios.
+
