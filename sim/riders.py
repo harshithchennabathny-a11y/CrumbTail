@@ -100,15 +100,12 @@ class SimRider:
         return self.path_idx >= len(self.path) - 1
     
     def idle_drift(self, dt_sec: float):
-        """Small random walk while idle, keeps heartbeat fresh."""
-        self.idle_heading += random.uniform(-20, 20)
-        rad = math.radians(self.idle_heading)
-        speed = BASE_SPEED_MS * 0.3 * dt_sec  # slow drift
-        # Convert m to degrees (approx)
-        dlat = (speed * math.cos(rad)) / 111_320
-        dlon = (speed * math.sin(rad)) / (111_320 * math.cos(math.radians(self.lat)))
-        self.lat = max(BANGALORE_BOUNDS["min_lat"], min(BANGALORE_BOUNDS["max_lat"], self.lat + dlat))
-        self.lon = max(BANGALORE_BOUNDS["min_lon"], min(BANGALORE_BOUNDS["max_lon"], self.lon + dlon))
+        """Micro-jitter while idle at road hub, keeping GPS heartbeat fresh without wandering off-road."""
+        # Microscopic jitter (< 2 metres) so coordinates stay on the road
+        self.lat += random.uniform(-0.00001, 0.00001)
+        self.lon += random.uniform(-0.00001, 0.00001)
+        self.lat = max(BANGALORE_BOUNDS["min_lat"], min(BANGALORE_BOUNDS["max_lat"], self.lat))
+        self.lon = max(BANGALORE_BOUNDS["min_lon"], min(BANGALORE_BOUNDS["max_lon"], self.lon))
 
 
 class RiderSimulator:
@@ -130,19 +127,30 @@ class RiderSimulator:
             base_url=self.base_url, timeout=5.0, limits=limits
         )
         
-        HUBS = [
-            (12.9784, 77.6408), (12.9352, 77.6245), (12.9116, 77.6389),
-            (12.9166, 77.6101), (12.9308, 77.5838), (12.9063, 77.5857),
-            (12.9757, 77.6068), (13.0035, 77.5710), (12.9569, 77.7011),
-            (12.9698, 77.7500), (13.0358, 77.5970), (12.8452, 77.6602),
-            (12.9308, 77.5726), (12.9716, 77.5946), (12.9500, 77.6300),
-        ]
-        
+        from app.seed.bangalore import RIDER_HUBS
+        from app.routing.astar import _snap_to_node, _graph, _load_graph as _astar_load
+        if _graph is None:
+            _astar_load()
+
+        # Collect all graph node IDs sorted by hub proximity — pick different ones per rider
+        all_node_ids = list(_graph.keys()) if _graph else []
+
         for i in range(1, self.num_riders + 1):
             rid = f"rider_{i:04d}"
-            hub = HUBS[i % len(HUBS)]
-            lat = hub[0] + random.uniform(-0.015, 0.015)
-            lon = hub[1] + random.uniform(-0.015, 0.015)
+            hub_lat, hub_lon, _ = RIDER_HUBS[i % len(RIDER_HUBS)]
+            try:
+                # Use increasing jitter radius per rider index within same hub group
+                # so riders within the same hub don't pile up on one node
+                jitter_scale = 0.002 + (i % 4) * 0.0025  # 0.002 to 0.0095 degrees (~220m-1km)
+                angle = (i * 137.5) % 360  # golden-angle spread avoids overlap
+                dlat = jitter_scale * math.cos(math.radians(angle))
+                dlon = jitter_scale * math.sin(math.radians(angle))
+                s_node = _snap_to_node(hub_lat + dlat, hub_lon + dlon)
+                lat = _graph[s_node]["lat"]
+                lon = _graph[s_node]["lon"]
+            except Exception:
+                lat = hub_lat + random.uniform(-0.003, 0.003)
+                lon = hub_lon + random.uniform(-0.003, 0.003)
             rider = SimRider(rider_id=rid, lat=lat, lon=lon, sim_speed=self.sim_speed)
             self.riders[rid] = rider
             # Register via API
@@ -154,14 +162,24 @@ class RiderSimulator:
         print(f"[SIM] Initialized {len(self.riders)} riders")
     
     async def _get_route(self, lat1, lon1, lat2, lon2) -> List[Tuple[float, float]]:
-        """Fetch A* route from backend."""
+        """Fetch authentic A* road polyline directly from routing engine."""
+        try:
+            from app.routing.astar import compute_route_sync
+            poly, _ = compute_route_sync(lat1, lon1, lat2, lon2)
+            if poly and len(poly) > 1:
+                return poly
+        except Exception:
+            pass
+
         try:
             resp = await self.client.get("/demo/route", params={
                 "lat1": lat1, "lon1": lon1, "lat2": lat2, "lon2": lon2
-            }, timeout=10.0)
+            }, timeout=5.0)
             if resp.status_code == 200:
                 data = resp.json()
-                return [(p["lat"], p["lon"]) for p in data["polyline"]]
+                poly = [(p["lat"], p["lon"]) for p in data.get("polyline", [])]
+                if poly and len(poly) > 1:
+                    return poly
         except Exception:
             pass
         return straight_polyline(lat1, lon1, lat2, lon2)
